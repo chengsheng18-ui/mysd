@@ -53,8 +53,26 @@ jobs:
       - name: Generate project
         run: xcodegen generate --spec project.yml
 
+      # `if:` cannot reference `secrets` directly (GitHub rejects the whole
+      # workflow at parse time), so stage it through env first.
+      - name: Stage signing assets
+        env:
+          CERT: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          CERT_PW: ${{ secrets.P12_PASSWORD }}
+          PROFILE: ${{ secrets.PROVISIONING_PROFILE_BASE64 }}
+          TEAM: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ -n "$CERT" ] && [ -n "$PROFILE" ]; then
+            echo "SIGNING=1" >> "$GITHUB_ENV"
+            echo "has_signing_assets=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_signing_assets=false" >> "$GITHUB_OUTPUT"
+            echo "no signing secrets — producing an unsigned ipa only"
+          fi
+        id: signassets
+
       - name: Import signing assets
-        if: ${{ secrets.BUILD_CERTIFICATE_BASE64 != '' }}
+        if: steps.signassets.outputs.has_signing_assets == 'true'
         env:
           CERT: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
           CERT_PW: ${{ secrets.P12_PASSWORD }}
