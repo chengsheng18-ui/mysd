@@ -41,8 +41,8 @@ jobs:
           curl -fL --retry 3 -o /tmp/sdcpp.zip \
             https://github.com/haplollc/Mirage/releases/download/sdcpp-2026-08-27/sdcpp.xcframework.zip
           unzip -q /tmp/sdcpp.zip -d Frameworks/
-          cp Frameworks/sdcpp.xcframework/ios-arm64/Headers/MirageC.h Sources/CMirage/include/MirageC.h
-          cp Frameworks/sdcpp.xcframework/ios-arm64/Headers/module.modulemap Sources/CMirage/
+          test -f Frameworks/sdcpp.xcframework/ios-arm64/Headers/module.modulemap
+          test -f Frameworks/sdcpp.xcframework/ios-arm64/libmirage-sdcpp.a
 
       - name: Validate plists
         run: python3 scripts/check_plists.py
