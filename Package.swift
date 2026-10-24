@@ -15,16 +15,12 @@ let package = Package(
             name: "sdcpp",
             path: "Frameworks/sdcpp.xcframework"
         ),
-        // Local modulemap over the header mirrored out of the xcframework,
-        // so `import CMirage` works without depending on the xcframework's
-        // internal modulemap (which SwiftPM does not re-export).
-        .target(
-            name: "CMirage",
-            path: "Sources/CMirage"
-        ),
+        // `import CMirage` resolves through the modulemap shipped INSIDE
+        // sdcpp.xcframework. Do not add a local C target with the same module
+        // name: clang fails with "Build a shadowed submodule 'CMirage'".
         .target(
             name: "Mirage",
-            dependencies: ["sdcpp", "CMirage"],
+            dependencies: ["sdcpp"],
             path: "Sources/Mirage"
         ),
     ],

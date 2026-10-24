@@ -17,7 +17,7 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 XCF = ROOT / "Frameworks" / "sdcpp.xcframework" / "ios-arm64"
-VENDORED_H = ROOT / "Sources" / "CMirage" / "include" / "MirageC.h"
+VENDORED_H = ROOT / "Frameworks" / "sdcpp.xcframework" / "ios-arm64" / "Headers" / "MirageC.h"
 SWIFT = ROOT / "Sources" / "Mirage" / "Mirage.swift"
 LIB = XCF / "libmirage-sdcpp.a"
 
@@ -36,10 +36,11 @@ check(LIB.exists(), "libmirage-sdcpp.a exists")
 if not LIB.exists():
     sys.exit("\n".join(fails))
 
-print("2. vendored header matches xcframework header")
+print("2. header available from the xcframework (no local CMirage target)")
 ship_h = (XCF / "Headers" / "MirageC.h").read_text()
-check(VENDORED_H.read_text() == ship_h,
-      "Sources/CMirage/include/MirageC.h is byte-identical to the shipped header")
+check(VENDORED_H.exists(), "xcframework ships MirageC.h for `import CMirage`")
+check(not (ROOT / "Sources" / "CMirage").exists(),
+      "no local CMirage target (would shadow the xcframework's submodule)")
 
 print("3. Swift -> C calls are declared")
 called = set(re.findall(r"\b(mirage_[a-z_]+)\(", SWIFT.read_text()))

@@ -31,7 +31,7 @@
 | `App/ModelManifest.swift` | 两套模型预设的下载清单与体积 |
 | `App/Downloader.swift` | 断点续传下载器（写 Application Support/Models） |
 | `Sources/Mirage/` | Swift 门面层，只包已发布的 10 个 C 符号 |
-| `Sources/CMirage/` | C modulemap + 头文件（与 xcframework 内的字节一致） |
+| `Sources/CMirage/` | ~~已移除~~：`import CMirage` 走 xcframework 内置的 modulemap，自建同名目标会触发 shadowed submodule |
 | `Frameworks/` | 预编译 `sdcpp.xcframework`（26 MB，CI 自动下载，不入库） |
 | `project.yml` | XcodeGen 描述，生成 `MinisDiffusion.xcodeproj` |
 | `scripts/selfcheck.py` | 离线自检：头文件/符号/entitlement/YAML |
