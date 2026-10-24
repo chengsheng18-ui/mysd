@@ -1,0 +1,138 @@
+name: build-ipa
+
+# Produces an unsigned .ipa you can sideload with AltStore / SideStore / Sideloadly.
+# The memory entitlements (increased-memory-limit + extended-virtual-addressing)
+# require a PAID Apple Developer account to be honoured; with a free account the
+# binary still installs but iOS caps the process at ~2-3 GB and the model load
+# will be jetsam-killed.
+#
+# Required repository secret when you want automatic signing:
+#   APPLE_TEAM_ID             10-char Team ID
+# Optional (manual provisioning, exports the .ipa already signed):
+#   BUILD_CERTIFICATE_BASE64   base64 of your .p12
+#   P12_PASSWORD
+#   PROVISIONING_PROFILE_BASE64 base64 of a .mobileprovision for dev.minis.diffusion
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Fetch sdcpp.xcframework (26 MB, not in git)
+        run: |
+          set -euo pipefail
+          if [ -f Frameworks/sdcpp.xcframework/Info.plist ]; then
+            echo "already present"; exit 0
+          fi
+          mkdir -p Frameworks
+          curl -fL --retry 3 -o /tmp/sdcpp.zip \
+            https://github.com/haplollc/Mirage/releases/download/sdcpp-2026-08-27/sdcpp.xcframework.zip
+          unzip -q /tmp/sdcpp.zip -d Frameworks/
+          cp Frameworks/sdcpp.xcframework/ios-arm64/Headers/MirageC.h Sources/CMirage/include/MirageC.h
+          cp Frameworks/sdcpp.xcframework/ios-arm64/Headers/module.modulemap Sources/CMirage/
+
+      - name: Validate plists
+        run: python3 scripts/check_plists.py
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate project
+        run: xcodegen generate --spec project.yml
+
+      - name: Import signing assets
+        if: ${{ secrets.BUILD_CERTIFICATE_BASE64 != '' }}
+        env:
+          CERT: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          CERT_PW: ${{ secrets.P12_PASSWORD }}
+          PROFILE: ${{ secrets.PROVISIONING_PROFILE_BASE64 }}
+          TEAM: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN=$RUNNER_TEMP/app.keychain-db
+          KEYCHAIN_PW=$(uuidgen)
+          security create-keychain -p "$KEYCHAIN_PW" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PW" "$KEYCHAIN"
+          echo "$CERT" | base64 -d > /tmp/cert.p12
+          security import /tmp/cert.p12 -k "$KEYCHAIN" -P "$CERT_PW" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PW" "$KEYCHAIN"
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          echo "$PROFILE" | base64 -d > ~/Library/MobileDevice/Provisioning\ Profiles/profile.mobileprovision
+          echo "SIGNING=1" >> "$GITHUB_ENV"
+          echo "TEAM=$TEAM" >> "$GITHUB_ENV"
+
+      # 1) Always produce an unsigned build first: proves the code compiles
+      #    without needing any Apple account.
+      - name: Build (unsigned)
+        run: |
+          xcodebuild \
+            -project MinisDiffusion.xcodeproj \
+            -scheme MinisDiffusion \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            ONLY_ACTIVE_ARCH=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
+
+      - name: Package unsigned ipa
+        run: |
+          set -euo pipefail
+          APP=$(find build/Build/Products/Release-iphoneos -name "*.app" -maxdepth 1 | head -1)
+          test -n "$APP"
+          mkdir -p Payload
+          cp -R "$APP" Payload/
+          /usr/bin/ditto -c -k --sequesterRsrc --keepParent Payload MinisDiffusion-unsigned.ipa
+          /usr/bin/ditto -c -k --sequesterRsrc --keepParent "$APP" MinisDiffusion-unsigned.app.zip
+          ls -lh MinisDiffusion-unsigned.ipa
+
+      # 2) If signing assets exist, re-export a properly signed ipa.
+      - name: Export signed ipa
+        if: ${{ env.SIGNING == '1' }}
+        run: |
+          set -euo pipefail
+          cat > ExportOptions.plist <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>ad-hoc</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>teamID</key><string>$TEAM</string>
+            <key>compileBitcode</key><false/>
+            <key>stripSwiftSymbols</key><true/>
+          </dict></plist>
+          PLIST
+          xcodebuild -project MinisDiffusion.xcodeproj -scheme MinisDiffusion \
+            -configuration Release -destination 'generic/platform=iOS' \
+            -archivePath build/MinisDiffusion.xcarchive \
+            CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM="$TEAM" \
+            archive
+          xcodebuild -exportArchive -archivePath build/MinisDiffusion.xcarchive \
+            -exportPath out -exportOptionsPlist ExportOptions.plist
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: MinisDiffusion-ipa
+          path: |
+            MinisDiffusion-unsigned.ipa
+            MinisDiffusion-unsigned.app.zip
+            out/*.ipa
+          if-no-files-found: warn
+          retention-days: 30

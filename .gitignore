@@ -1,0 +1,13 @@
+#gradle
+.git
+build
+DerivedData
+*.xcuserstate
+xcuserdata/
+out/
+Payload/
+*.ipa
+
+# The 26 MB prebuilt engine — fetched by CI, not committed
+Frameworks/sdcpp.xcframework/
+Frameworks/*.zip
