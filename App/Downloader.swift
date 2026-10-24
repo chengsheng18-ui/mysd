@@ -28,18 +28,18 @@ final class Downloader: NSObject, ObservableObject {
         return URLSession(configuration: cfg, delegate: self, delegateQueue: nil)
     }()
 
-    static var modelsDirectory: URL {
+    nonisolated static var modelsDirectory: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         let dir = base.appendingPathComponent("Models", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }
 
-    static func localURL(for file: ModelFile) -> URL {
+    nonisolated static func localURL(for file: ModelFile) -> URL {
         modelsDirectory.appendingPathComponent(file.filename)
     }
 
-    static func isPresent(_ file: ModelFile) -> Bool {
+    nonisolated static func isPresent(_ file: ModelFile) -> Bool {
         // Treat anything within 2% of the expected size as complete; exact
         // byte counts drift when a repo is re-quantised.
         guard let attrs = try? FileManager.default.attributesOfItem(atPath: localURL(for: file).path),
@@ -47,15 +47,15 @@ final class Downloader: NSObject, ObservableObject {
         return size > Int64(Double(file.bytes) * 0.98)
     }
 
-    static func presetReady(_ preset: ModelManifest.Preset) -> Bool {
+    nonisolated static func presetReady(_ preset: ModelManifest.Preset) -> Bool {
         preset.files.allSatisfy(isPresent)
     }
 
-    static func bytesOnDisk(_ preset: ModelManifest.Preset) -> Int64 {
+    nonisolated static func bytesOnDisk(_ preset: ModelManifest.Preset) -> Int64 {
         preset.files.reduce(0) { acc, f in
             let p = localURL(for: f).path
             let s = (try? FileManager.default.attributesOfItem(atPath: p)[.size] as? Int64) ?? 0
-            return acc + (s ?? 0)
+            return acc + s
         }
     }
 
@@ -113,7 +113,6 @@ extension Downloader: URLSessionDownloadDelegate {
 
     nonisolated func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask,
                                 didFinishDownloadingTo location: URL) {
-        let desc = downloadTask.taskDescription ?? ""
         Task { @MainActor in
             guard let p = self.pending else { return }
             let dest = Downloader.localURL(for: p.file)

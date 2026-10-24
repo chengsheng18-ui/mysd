@@ -28,6 +28,17 @@ enum ModelManifest {
     /// Mirror used for downloads. Swap to "https://huggingface.co" where reachable.
     static let host = "https://hf-mirror.com"
 
+    /// SD 1.5: UNet + CLIP + VAE all inside one GGUF, so a single 1.5 GB
+    /// download. The only preset that comfortably fits a 6 GB iPhone with the
+    /// stock (non-entitled) ~2-3 GB per-process ceiling.
+    static let sd15Files = [
+        ModelFile(filename: "sd15-Q4_0.gguf",
+                  repo: "second-state/stable-diffusion-v1-5-GGUF",
+                  remotePath: "stable-diffusion-v1-5-pruned-emaonly-Q4_0.gguf",
+                  bytes: 1_566_700_000,
+                  role: .diffusion),
+    ]
+
     // Z-Image-Turbo (S3-DiT, 6B, distilled to ~8 steps).
     // Weights from unsloth's GGUF quant set; VAE is FLUX.2's autoencoder.
     static let zImageTurbo = [
@@ -73,16 +84,6 @@ enum ModelManifest {
         case sd15, lean, turbo
         var id: String { rawValue }
 
-        /// Fits a ~6 GB iPhone 14/15 with the default 2-3 GB jetsam ceiling.
-        /// CLIP + VAE are baked into this single GGUF, so no extra files.
-        static let sd15 = [
-            ModelFile(filename: "sd15-Q4_0.gguf",
-                      repo: "second-state/stable-diffusion-v1-5-GGUF",
-                      remotePath: "stable-diffusion-v1-5-pruned-emaonly-Q4_0.gguf",
-                      bytes: 1_566_700_000,
-                      role: .diffusion),
-        ]
-
         var title: String {
             switch self {
             case .sd15:  return "SD 1.5 Q4_0"
@@ -107,7 +108,7 @@ enum ModelManifest {
         }
         var files: [ModelFile] {
             switch self {
-            case .sd15:  return ModelManifest.sd15
+            case .sd15:  return ModelManifest.sd15Files
             case .turbo: return ModelManifest.zImageTurbo
             case .lean:  return ModelManifest.zImageTurboLean
             }
